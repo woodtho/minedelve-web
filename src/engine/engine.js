@@ -197,6 +197,7 @@ function damagePlayer(state, dmg, srcText) {
     return false;
   }
   state.hp -= dmg;
+  note(state, `${srcText} −${dmg} heart${dmg === 1 ? "" : "s"}.`);
   if (state.hp <= 0) {
     if (runHook(state, "onLethal")) {
       state.hp = 1;
@@ -205,7 +206,6 @@ function damagePlayer(state, dmg, srcText) {
     die(state);
     return true;
   }
-  note(state, `${srcText} −${dmg} heart${dmg === 1 ? "" : "s"}.`);
   return false;
 }
 
