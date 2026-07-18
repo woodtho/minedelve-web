@@ -18,7 +18,22 @@ const NUM_COLORS = ["", "#5aa9ff", "#5cd65c", "#ff6b6b", "#c792ea",
   "#ffd166", "#4dd0e1", "#ff9e80", "#d8d8d8"];
 
 // Real-time heartbeat: one world turn passes every TICK_MS even if you idle.
-const TICK_MS = 5000;
+const TICK_MS = 8000;
+
+// Small screens get a compact, one-screen layout: no fanned card hand, no
+// oversized chrome. Tracks the same breakpoint as styles.css.
+function useIsMobile() {
+  const [mobile, setMobile] = useState(
+    () => window.matchMedia("(max-width: 640px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const on = (e) => setMobile(e.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return mobile;
+}
 
 const hearts = (hp, maxHp) =>
   "❤️".repeat(Math.max(0, hp)) + "🖤".repeat(Math.max(0, maxHp - hp));
@@ -100,7 +115,7 @@ export default function App() {
     return () => window.removeEventListener("pointerdown", un);
   }, []);
 
-  // Real-time pressure: while a floor is active, the world ticks every 3s —
+  // Real-time pressure: while a floor is active, the world ticks every TICK_MS —
   // awake enemies count down and strike whether or not you move. Paused while
   // the saves menu is open.
   const [tickN, setTickN] = useState(0);
@@ -363,14 +378,14 @@ function PlayScreen({ state, dispatch, pending, setPending, tickN, hurtN, uiErro
   );
 
   return (
-    <>
+    <div className="game">
       <Hud state={state} bestDepth={bestDepth} />
       <div className="tickrow" title="The mine advances on its own — each time the bar empties, one turn passes even if you don't move.">
         <div className="tickbar">
           <div className="tickfill" key={tickN} style={{ animationDuration: `${TICK_MS}ms` }} />
         </div>
         <span className="ticklabel">
-          {need === 0
+          {need === 0 && !bossUp
             ? `⚠️ stirs in ${state.stir < STIR_GRACE
                 ? STIR_GRACE - state.stir
                 : STIR_INTERVAL - ((state.stir - STIR_GRACE) % STIR_INTERVAL)}`
@@ -412,7 +427,7 @@ function PlayScreen({ state, dispatch, pending, setPending, tickN, hurtN, uiErro
               const status = e.stun > 0 ? `💫 stunned ${e.stun}`
                 : e.winding ? "⚡ STRIKES NEXT"
                 : !active.has(e.uid) ? "… lurking"
-                : `hits ${e.dmg} in ${e.cd + 1}`;
+                : `hits ${e.dmg} in ${e.cd + 1 + (e.justWoke ? 1 : 0)}`;
               return (
                 <button
                   className={`foe${e.boss ? " boss" : ""}${e.winding ? " windup" : ""}`}
@@ -440,7 +455,10 @@ function PlayScreen({ state, dispatch, pending, setPending, tickN, hurtN, uiErro
       >
         <div
           className="grid"
-          style={{ "--cols": b.cols, gridTemplateColumns: `repeat(${b.cols}, var(--cell))` }}
+          style={{
+            "--cols": b.cols, "--rows": b.rows,
+            gridTemplateColumns: `repeat(${b.cols}, var(--cell))`,
+          }}
 >
           {Array.from({ length: b.rows * b.cols }, (_, i) => {
             const r = Math.floor(i / b.cols), c = i % b.cols;
@@ -467,7 +485,7 @@ function PlayScreen({ state, dispatch, pending, setPending, tickN, hurtN, uiErro
         <div className="need">Clear {need} more safe tile{need === 1 ? "" : "s"} to open the stairs.</div>
       )}
       <LogPanel log={state.log} />
-    </>
+    </div>
   );
 }
 
@@ -489,6 +507,7 @@ function ItemHand({ state, onUseItem, onUseAbility, readOnly = false }) {
       count: state.items[id], desc: ITEMS[id].desc,
     })),
   ];
+  const isMobile = useIsMobile();
   const [act, setAct] = useState(0);
   useEffect(() => {
     if (act >= cards.length) setAct(Math.max(0, cards.length - 1));
@@ -516,6 +535,33 @@ function ItemHand({ state, onUseItem, onUseAbility, readOnly = false }) {
     }
     swipe.current.x = null;
   };
+
+  // Compact one-row strip on small screens — the fanned hand is too tall to
+  // keep the whole game on one screen. Tap to use (aiming works as usual).
+  if (isMobile) {
+    return (
+      <div className="hand-strip">
+        {cards.map((c) => (
+          <button
+            key={c.key}
+            className={
+              `item-btn strip${c.kind === "ability" ? " ability" : ""}` +
+              `${c.count <= 0 ? " spent" : ""}`
+            }
+            disabled={readOnly || c.count <= 0}
+            title={`${c.name} — ${c.desc}`}
+            onClick={() => {
+              if (c.kind === "ability") onUseAbility();
+              else onUseItem(c.id);
+            }}
+          >
+            <span className="strip-ic">{c.icon}</span>
+            <span className="strip-ct">×{c.count}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -198,6 +198,16 @@ body {
 .hand-arrow.left { left: 4px; }
 .hand-arrow.right { right: 4px; }
 
+/* ---- compact hand: one tappable row on small screens ---- */
+.hand-strip {
+  display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
+  margin: 2px 0 6px;
+}
+.item-btn.strip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; }
+.strip-ic { font-size: 18px; line-height: 1; }
+.strip-ct { font-size: 11px; color: #ffd166; font-variant-numeric: tabular-nums; }
+.item-btn.strip.spent { opacity: .4; }
+
 .aim {
   --ch: 8px;
   text-align: center; color: var(--ink); font-weight: 800; padding: 8px;
@@ -225,10 +235,21 @@ body {
 
 .grid {
   display: grid; gap: 3px;
-  --cell: min(
+  /* Vertical room left for the board once the HUD, hand, and log are laid out.
+     Overridden on small screens where the chrome is far more compact. */
+  --chrome: 480px;
+  --avail-h: calc(100vh - var(--chrome));
+  /* Cells shrink to fit BOTH the viewport width and height, so the whole
+     board stays on screen without panning; 18px is the tap-target floor
+     (below it the board-frame scrolls as a last resort). */
+  --cell: max(18px, min(
     var(--cell-max),
-    calc((100vw - 44px - (var(--cols, 10) - 1) * 3px) / var(--cols, 10))
-  );
+    calc((100vw - 44px - (var(--cols, 10) - 1) * 3px) / var(--cols, 10)),
+    calc((var(--avail-h) - (var(--rows, 8) - 1) * 3px) / var(--rows, 8))
+  ));
+}
+@supports (height: 100dvh) {
+  .grid { --avail-h: calc(100dvh - var(--chrome)); }
 }
 .cell {
   width: var(--cell); height: var(--cell); padding: 0; font-weight: 800;
@@ -435,15 +456,36 @@ body {
 .tag.danger { background: #3a1414; color: #ff9e80; }
 .tag.relic { background: #2a1f3a; color: #c792ea; }
 
-/* ---- small screens ---- */
-@media (max-width: 480px) {
-  .wrap { padding: 10px 6px 32px; }
+/* ---- small screens: a compact, one-screen game layout ---- */
+@media (max-width: 640px) {
+  .wrap { padding: 8px 6px 16px; }
   .title { font-size: 21px; letter-spacing: 4px; }
-  .stat { font-size: 12px; padding: 4px 8px; gap: 5px; min-height: 28px; }
-  .hud { gap: 6px; margin: 10px 0 8px; }
-  .item-btn, .btn { padding: 8px 10px; font-size: 11px; }
-  .panel { padding: 16px 12px; margin: 14px auto; }
+  /* During play, drop the decorative header and instructions entirely —
+     the vertical budget belongs to the board. */
+  .game .title, .game .subtitle, .game .legend { display: none; }
+  .hud { gap: 5px; margin: 4px 0 6px; }
+  .stat { font-size: 11px; padding: 3px 7px; gap: 4px; min-height: 24px; }
+  .hearts { font-size: 12px; }
+  .items { gap: 6px; margin: 4px 0 6px; }
+  .item-btn, .btn { padding: 6px 9px; font-size: 11px; }
+  .relics { margin-bottom: 4px; }
+  .msg { margin: 2px 0 6px; min-height: 16px; font-size: 12px; }
+  .tickrow { margin: 0 auto 6px; }
+  .enemy-strip { gap: 5px; margin-bottom: 6px; }
+  .enemy-strip .foe { font-size: 11px; padding: 3px 8px; }
   .board-frame { padding: 6px; }
+  .need { margin-top: 8px; font-size: 12px; }
+  .need.stir { margin-top: 4px; }
+  .descend-row { margin-top: 8px; }
+  .descend { padding: 9px 22px; font-size: 14px; }
+  /* Last few log lines only, pinned to the bottom of a fixed-height window. */
+  .logpanel {
+    height: 34px; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    margin: 6px auto 0;
+  }
+  .grid { --chrome: 330px; }
+  .panel { padding: 16px 12px; margin: 14px auto; }
   .card { width: 46%; min-width: 140px; }
   .classcard { width: 46%; }
   .path { width: 100%; }

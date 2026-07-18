@@ -105,15 +105,17 @@ export function observe(state) {
             winding: !!e.winding,
             // lurking: awake but out of attacker slots — its countdown is frozen.
             lurking: e.awake && e.stun <= 0 && !active.has(e.uid),
-            attacksIn: e.winding ? 0 : (e.stun > 0 ? e.cd + e.stun + 1 : e.cd + 1),
+            attacksIn: e.winding ? 0
+              : (e.stun > 0 ? e.cd + e.stun + 1 : e.cd + 1) + (e.justWoke ? 1 : 0),
             stunned: e.stun, boss: e.boss, enraged: !!e.enraged, traits: e.traits,
           }));
       })(),
       bossAlive: bossAlive(state),
       canDescend: canDescend(state),
       // Lingering after the stairs open wakes the mine. nextStirIn counts the
-      // turns until something new claws out of the ground.
-      stir: quotaMet(state)
+      // turns until something new claws out of the ground. While a boss holds
+      // the stairs shut, the stir is paused — fighting it is not lingering.
+      stir: quotaMet(state) && !bossAlive(state)
         ? {
             active: true,
             nextStirIn: state.stir < STIR_GRACE
@@ -178,7 +180,7 @@ export function legalActions(state) {
       params: cls.ability.target ? "r, c required" : "no target",
     });
     if (canDescend(state)) out.push({ type: "descend" });
-    out.push({ type: "tick", params: "no target — time passes, enemies act (the UI fires this every 3s)" });
+    out.push({ type: "tick", params: "no target — time passes, enemies act (the UI fires this on a heartbeat)" });
   } else if (state.phase === "shop") {
     state.shop.forEach((id, slot) => {
       if (id && state.gold >= priceOf(state, id)) out.push({ type: "buy", slot });

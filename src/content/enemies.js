@@ -95,7 +95,7 @@ export const BOSSES = {
     },
   },
   gilded_golem: {
-    id: "gilded_golem", name: "The Gilded Golem", icon: "🌟", hp: 8, dmg: 2, cd: 5, bounty: 90,
+    id: "gilded_golem", name: "The Gilded Golem", icon: "🌟", hp: 6, dmg: 2, cd: 5, bounty: 90,
     traits: { armored: true }, boss: true,
     desc: "Armored in solid gold — at most 1 damage per hit, but slow as sediment.",
     onEnrage: (state, H, e) => {
@@ -105,9 +105,9 @@ export const BOSSES = {
     },
   },
   deep_warden: {
-    id: "deep_warden", name: "The Deep Warden", icon: "🐲", hp: 9, dmg: 3, cd: 4, bounty: 75,
+    id: "deep_warden", name: "The Deep Warden", icon: "🐲", hp: 9, dmg: 2, cd: 4, bounty: 75,
     traits: {}, boss: true,
-    desc: "The mine's jailer. Hits for three hearts. Do not get comfortable.",
+    desc: "The mine's jailer. Hits for two hearts. Do not get comfortable.",
     onEnrage: (state, H) => {
       H.rehideRandomRevealed(state, 3, "🐲 The Warden's roar shakes the mine —");
     },

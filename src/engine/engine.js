@@ -295,6 +295,7 @@ function stunEnemyAt(state, r, c, turns, srcText) {
 function wakeEnemy(state, e) {
   if (e.awake || e.hp <= 0) return;
   e.awake = true;
+  e.justWoke = true; // grace: no countdown progress on the turn it wakes
   e.cd = runModHook(state, "modEnemyCooldown", e.cdMax);
   note(state, `${e.icon} A ${e.name} wakes up!`);
 }
@@ -427,8 +428,8 @@ function spawnEnemy(state, template, tileIdx, opts = {}) {
   // Bosses gain hp with depth; regular enemies toughen slowly (faster in
   // corrupted endless floors).
   const hpBonus = isBoss
-    ? Math.floor(state.floor * 0.6)
-    : Math.floor((state.floor - 1) / 4) + corruptionTier(state.floor);
+    ? Math.floor(state.floor * 0.4)
+    : Math.floor((state.floor - 1) / 6) + corruptionTier(state.floor);
   const hp = template.hp + hpBonus;
   const e = {
     uid: state.nextUid++,
@@ -448,11 +449,13 @@ function spawnEnemy(state, template, tileIdx, opts = {}) {
     enraged: false,
     awake: false,
     winding: false,
+    justWoke: false,
     stun: 0,
   };
   state.enemies.push(e);
   if (awake) {
     e.awake = true;
+    e.justWoke = true;
     e.cd = runModHook(state, "modEnemyCooldown", e.cdMax);
   }
   return e;
@@ -561,7 +564,10 @@ function enemyAct(state, e) {
  * ground every few turns. Either way, the clock is never meaningless.
  */
 function worldPressure(state) {
-  if (!quotaMet(state)) {
+  if (!quotaMet(state) || bossAlive(state)) {
+    // The stir only punishes lingering when the player is *free* to descend.
+    // While the quota is unmet — or a boss holds the stairs shut — the mine
+    // only wakes slowly: one sleeper surfaces every WAKE_INTERVAL turns.
     if (!state.board.started) return;
     if (state.turn > 0 && state.turn % WAKE_INTERVAL === 0) {
       const sleeper = state.enemies.find((e) => e.hp > 0 && !e.awake);
@@ -609,6 +615,12 @@ function tickEnemies(state) {
   let slots = MAX_ATTACKERS;
   for (const e of state.enemies) {
     if (e.hp <= 0 || !e.awake) continue;
+    if (e.justWoke) {
+      // Grace turn: an enemy revealed this turn doesn't start its countdown
+      // until the player has had one turn to react.
+      e.justWoke = false;
+      continue;
+    }
     if (e.stun > 0) {
       e.stun -= 1;
       continue;
