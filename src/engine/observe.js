@@ -17,7 +17,7 @@ import {
   CLASSES, ITEMS, FLOOR_TYPES,
   enemyAt, revealedSafeCount, quotaMet, bossAlive, canDescend, computeAttack,
   rerollCost, priceOf, corruptionTier, attackerUids,
-  STIR_GRACE, STIR_INTERVAL, WAKE_INTERVAL,
+  STIR_GRACE, STIR_INTERVAL, WAKE_INTERVAL, REST_LIMIT_PER_VAULT,
 } from "./engine.js";
 
 export function observe(state) {
@@ -52,6 +52,10 @@ export function observe(state) {
     msg: state.msg,
     log: state.log.slice(-8),
     stats: { ...state.stats },
+    // The journey so far: one entry per floor entered, in order.
+    runMap: state.runMap.map((m) => ({
+      floor: m.floor, type: m.type, name: FLOOR_TYPES[m.type].name,
+    })),
   };
 
   if (state.phase === "play" || state.phase === "dead") {
@@ -132,6 +136,9 @@ export function observe(state) {
 
   if (state.phase === "shop") {
     base.shop = {
+      // hasShop: vaults only open every couple of floors; on a bare landing
+      // the only action is choosing a path.
+      hasShop: !!state.vaultShop,
       slots: state.shop.map((id, slot) => {
         if (!id) return { slot, soldOut: true };
         const m = ITEMS[id];
@@ -141,9 +148,12 @@ export function observe(state) {
           desc: m.desc, affordable: state.gold >= price,
         };
       }),
+      // Reroll replaces only unsold slots; its price grows for the whole run.
       rerollCost: rerollCost(state),
-      restCost: 12,
-      altarAvailable: !state.altarUsed && state.hp >= 2,
+      // Rest price grows permanently with each rest, max 2 rests per vault.
+      restCost: state.restCost,
+      restsLeft: Math.max(0, REST_LIMIT_PER_VAULT - (state.restsThisVault || 0)),
+      altarAvailable: !!state.vaultShop && !state.altarUsed && state.hp >= 2,
     };
     base.paths = state.paths.map((key, index) => {
       const ft = FLOOR_TYPES[key];
@@ -182,12 +192,17 @@ export function legalActions(state) {
     if (canDescend(state)) out.push({ type: "descend" });
     out.push({ type: "tick", params: "no target — time passes, enemies act (the UI fires this on a heartbeat)" });
   } else if (state.phase === "shop") {
-    state.shop.forEach((id, slot) => {
-      if (id && state.gold >= priceOf(state, id)) out.push({ type: "buy", slot });
-    });
-    if (state.gold >= rerollCost(state)) out.push({ type: "reroll" });
-    if (state.gold >= 12 && state.hp < state.maxHp) out.push({ type: "rest" });
-    if (!state.altarUsed && state.hp >= 2) out.push({ type: "altar" });
+    if (state.vaultShop) {
+      state.shop.forEach((id, slot) => {
+        if (id && state.gold >= priceOf(state, id)) out.push({ type: "buy", slot });
+      });
+      if (state.gold >= rerollCost(state) && state.shop.some((id) => id !== null))
+        out.push({ type: "reroll" });
+      if (state.gold >= state.restCost && state.hp < state.maxHp &&
+          (state.restsThisVault || 0) < REST_LIMIT_PER_VAULT)
+        out.push({ type: "rest" });
+      if (!state.altarUsed && state.hp >= 2) out.push({ type: "altar" });
+    }
     state.paths.forEach((key, index) =>
       out.push({ type: "choosePath", index, floorType: key })
     );

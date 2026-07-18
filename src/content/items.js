@@ -14,6 +14,7 @@
 //   onMineHit(state, H, count) -> bool   — return true to absorb the hit
 //   onLethal(state, H, count) -> bool    — return true to survive at 1 hp
 //   onEnemyAttack(state, H, count, enemy)— after an enemy damages the player
+//   onKill(state, H, count, enemy)       — after any enemy dies
 //   modGold(state, count, amount) -> n   — modify any gold gain
 //   modChestGold(state, count, n) -> n   — modify gold found in chests
 //   modAbilityCharges(state, count, n)   — modify per-floor ability charges
@@ -183,6 +184,33 @@ export const ITEMS = {
     id: "magnet", name: "Gold Magnet", icon: "🧲", price: 38, kind: "relic", unique: true,
     desc: "+25% gold from every source.",
     hooks: { modGold: (state, count, amount) => amount * 1.25 },
+  },
+  moss_heart: {
+    id: "moss_heart", name: "Mossglow Heart", icon: "🌿", price: 30, kind: "relic", unique: false,
+    desc: "Automatically heal 1 heart at the start of each floor. Stacks.",
+    hooks: {
+      floorStart: (state, H, count) => H.healPlayer(state, count, "🌿 Mossglow Heart:", true),
+    },
+  },
+  coin_press: {
+    id: "coin_press", name: "Coin Press", icon: "⚙️", price: 25, kind: "relic", unique: false,
+    desc: "Automatically mints 8 gold at the start of each floor. Stacks.",
+    hooks: {
+      floorStart: (state, H, count) => {
+        const g = H.gainGold(state, 8 * count);
+        H.note(state, `⚙️ Coin Press mints ${g} gold.`);
+      },
+    },
+  },
+  ledger: {
+    id: "ledger", name: "Bounty Ledger", icon: "📒", price: 28, kind: "relic", unique: false,
+    desc: "Automatically pays 6 extra gold for every enemy slain. Stacks.",
+    hooks: {
+      onKill: (state, H, count) => {
+        const g = H.gainGold(state, 6 * count);
+        H.note(state, `📒 Bounty Ledger pays ${g} gold.`);
+      },
+    },
   },
 };
 

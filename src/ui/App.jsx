@@ -3,8 +3,10 @@ import {
   createRun, applyAction, computeAttack, enemyAt,
   revealedSafeCount, rerollCost, priceOf, corruptionTier, attackerUids,
   STIR_GRACE, STIR_INTERVAL, WAKE_INTERVAL,
+  FINAL_FLOOR, REST_LIMIT_PER_VAULT, vaultHasShop,
   CLASSES, ITEMS, FLOOR_TYPES,
 } from "../engine/engine.js";
+import { isBossFloor } from "../content/floors.js";
 import {
   autosave, loadAutosave, clearAutosave,
   saveSlot, loadSlot, clearSlot, slotSummary,
@@ -706,49 +708,128 @@ function LogPanel({ log }) {
   );
 }
 
+// ---- run map ----------------------------------------------------------------
+// The journey, drawn as a chain of room tiles: each visited floor shows its
+// room's image and accent, the current floor glows, vault stops are marked,
+// and the road ahead shows crowns for bosses and question marks for the rest.
+function RunMap({ state }) {
+  const visited = new Map(state.runMap.map((m) => [m.floor, m.type]));
+  const horizon = state.floor >= FINAL_FLOOR || state.endless
+    ? state.floor + 3
+    : FINAL_FLOOR;
+  const nodes = [];
+  for (let f = 1; f <= horizon; f++) {
+    if (f > 1) {
+      nodes.push(
+        <span
+          key={`link-${f}`}
+          className={`rm-link${vaultHasShop(f) ? " shop" : ""}`}
+          title={vaultHasShop(f) ? `Vault before floor ${f}` : undefined}
+        >
+          {vaultHasShop(f) ? "🏪" : "·"}
+        </span>
+      );
+    }
+    const t = visited.get(f);
+    const ft = t ? FLOOR_TYPES[t] : null;
+    const cur = f === state.floor;
+    nodes.push(
+      <span
+        key={f}
+        className={`rm-node${cur ? " cur" : ""}${ft ? "" : " unknown"}`}
+        style={ft ? { borderColor: ft.accent } : undefined}
+        title={ft
+          ? `Floor ${f} — ${ft.name}`
+          : `Floor ${f}${isBossFloor(f) ? " — a boss guards it" : " — unexplored"}`}
+      >
+        <span className="rm-ic">{ft ? ft.icon : isBossFloor(f) ? "👑" : "❓"}</span>
+        <span className="rm-fl">{f}</span>
+      </span>
+    );
+  }
+  return <div className="runmap">{nodes}</div>;
+}
+
 // ---- shop -------------------------------------------------------------------
 
 function ShopScreen({ state, dispatch, uiError, bestDepth, onSaves }) {
+  const hasShop = !!state.vaultShop;
+  const restsLeft = Math.max(0, REST_LIMIT_PER_VAULT - (state.restsThisVault || 0));
+  const anyUnsold = state.shop.some((id) => id !== null);
+  const nextVault = (() => {
+    let n = state.floor + 2;
+    while (!vaultHasShop(n)) n++;
+    return n;
+  })();
   return (
     <div className="panel wide">
-      <h2>THE VAULT</h2>
+      <h2>{hasShop ? "THE VAULT" : "THE LANDING"}</h2>
+      <div className="section">The delve so far</div>
+      <RunMap state={state} />
       <p>
         Floor {state.floor} cleared. You carry {hearts(state.hp, state.maxHp)} and {state.gold} gold.
       </p>
       <div className="msg">{uiError || state.msg}</div>
-      <div className="cards">
-        {state.shop.map((id, slot) => {
-          if (!id) return <div className="card sold" key={slot}>Sold</div>;
-          const m = ITEMS[id];
-          const price = priceOf(state, id);
-          const owned = m.kind === "relic" && m.unique && (state.relics[id] || 0) > 0;
-          const afford = state.gold >= price && !owned;
-          return (
-            <div className={`card${afford ? "" : " dim"}`} key={slot}>
-              <div className="card-ic">{m.icon}</div>
-              <div className="card-nm">{m.name}</div>
-              <div className="card-ds tall">{m.desc}</div>
-              <div className="card-pr">{price}g</div>
-              <button className="buy" disabled={!afford} onClick={() => dispatch({ type: "buy", slot })}>
-                {owned ? "Owned" : "Buy"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      <div className="shop-actions">
-        <button className="btn" disabled={state.hp >= state.maxHp}
-          onClick={() => dispatch({ type: "rest" })}>➕ Rest — heal 1 (12g)</button>
-        <button className="btn" onClick={() => dispatch({ type: "reroll" })}>
-          🎲 Reroll shop ({rerollCost(state)}g)
-        </button>
-        <button className="btn" disabled={state.altarUsed || state.hp < 2}
-          onClick={() => dispatch({ type: "altar" })}>
-          {state.altarUsed ? "🩸 Altar spent" : "🩸 Blood Altar — 1 heart → relic"}
-        </button>
-        <MuteBtn />
-        <button className="btn" onClick={onSaves}>💾 Saves</button>
-      </div>
+      {hasShop ? (
+        <>
+          <div className="cards">
+            {state.shop.map((id, slot) => {
+              if (!id) return <div className="card sold" key={slot}>Sold</div>;
+              const m = ITEMS[id];
+              const price = priceOf(state, id);
+              const owned = m.kind === "relic" && m.unique && (state.relics[id] || 0) > 0;
+              const afford = state.gold >= price && !owned;
+              return (
+                <div className={`card${afford ? "" : " dim"}`} key={slot}>
+                  <div className="card-ic">{m.icon}</div>
+                  <div className="card-nm">{m.name}</div>
+                  <div className="card-ds tall">{m.desc}</div>
+                  <div className="card-pr">{price}g</div>
+                  <button className="buy" disabled={!afford} onClick={() => dispatch({ type: "buy", slot })}>
+                    {owned ? "Owned" : "Buy"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="shop-actions">
+            <button
+              className="btn"
+              disabled={state.hp >= state.maxHp || restsLeft <= 0 || state.gold < state.restCost}
+              title="Rest prices rise for the rest of the run each time you heal here."
+              onClick={() => dispatch({ type: "rest" })}
+            >
+              {restsLeft > 0
+                ? `➕ Rest — heal 1 (${state.restCost}g · ${restsLeft} left)`
+                : "➕ Bunk spent"}
+            </button>
+            <button
+              className="btn" disabled={!anyUnsold || state.gold < rerollCost(state)}
+              title="Replaces only the unsold slots. The price rises for the whole run."
+              onClick={() => dispatch({ type: "reroll" })}
+            >
+              🎲 Reroll unsold ({rerollCost(state)}g)
+            </button>
+            <button className="btn" disabled={state.altarUsed || state.hp < 2}
+              onClick={() => dispatch({ type: "altar" })}>
+              {state.altarUsed ? "🩸 Altar spent" : "🩸 Blood Altar — 1 heart → relic"}
+            </button>
+            <MuteBtn />
+            <button className="btn" onClick={onSaves}>💾 Saves</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="landing-note">
+            ⛺ A bare landing between vaults — nothing for sale here. The vault
+            reopens before floor {nextVault}.
+          </p>
+          <div className="shop-actions">
+            <MuteBtn />
+            <button className="btn" onClick={onSaves}>💾 Saves</button>
+          </div>
+        </>
+      )}
       <div className="vdiv" />
       <div className="section">Your hand</div>
       <ItemHand state={state} readOnly />
@@ -790,6 +871,7 @@ function EndScreen({ state, dispatch, won, bestDepth, onNewRun }) {
           ? `The ${cls.name} conquered the Warren's Heart on floor ${state.floor} and climbed back to daylight.`
           : `The mine claimed the ${cls.name} on floor ${state.floor}.`}
       </p>
+      <RunMap state={state} />
       <p>Gold: {state.gold} · Deepest run: floor {bestDepth}</p>
       <p className="statline">
         {st.tilesRevealed} tiles dug · {st.enemiesSlain} enemies slain · {st.minesHit} mines hit ·{" "}

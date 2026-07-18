@@ -93,9 +93,12 @@ function pickPlayAction(ob) {
 }
 
 function pickShopAction(ob) {
-  if (ob.hp < ob.maxHp && ob.gold >= 12) return { type: "rest" };
-  const buyable = ob.shop.slots.filter((s) => !s.soldOut && s.affordable);
-  if (buyable.length) return { type: "buy", slot: buyable[0].slot };
+  if (ob.shop.hasShop) {
+    if (ob.hp < ob.maxHp && ob.shop.restsLeft > 0 && ob.gold >= ob.shop.restCost)
+      return { type: "rest" };
+    const buyable = ob.shop.slots.filter((s) => !s.soldOut && s.affordable);
+    if (buyable.length) return { type: "buy", slot: buyable[0].slot };
+  }
   const treasure = ob.paths.find((p) => p.key === "treasure");
   return { type: "choosePath", index: (treasure ?? ob.paths[0]).index };
 }

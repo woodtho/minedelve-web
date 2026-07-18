@@ -25,8 +25,23 @@ import {
 } from "../content/floors.js";
 
 export const FINAL_FLOOR = 10;
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export { CLASSES, ITEMS, ENEMIES, BOSSES, FLOOR_TYPES };
+
+// ---- vault economy ----------------------------------------------------------
+// Healing and rerolls get pricier the more you lean on them, and the increases
+// stick for the whole run — the vault is a lifeline, not a farm.
+export const REST_LIMIT_PER_VAULT = 2; // hearts purchasable per vault stop
+export const REST_COST_STEP = 3;       // rest price grows by this per rest, forever
+export const REST_COST_BASE = 10;
+export const REROLL_BASE = 5;
+export const REROLL_STEP = 5;          // reroll price grows by this per reroll, forever
+
+/** The vault (shop) only opens every couple of floors; landings between them
+ *  still offer the path choice. Bosses are always preceded by a vault. */
+export function vaultHasShop(nextFloor) {
+  return isBossFloor(nextFloor) || nextFloor % 2 === 1;
+}
 
 // Once the stairs open, the mine starts waking things: after STIR_GRACE more
 // turns on the floor, something claws out of the ground every STIR_INTERVAL
@@ -222,6 +237,7 @@ function damageEnemy(state, enemy, dmg, srcText) {
     } else {
       note(state, `${srcText} slew the ${enemy.name}!`);
     }
+    runHook(state, "onKill", enemy);
   } else {
     note(state, `${srcText} hit the ${enemy.name} for ${dealt} (${enemy.hp}/${enemy.maxHp}).`);
     if (enemy.winding && !enemy.boss) {
@@ -322,17 +338,19 @@ function openChest(state, i) {
   }
   b.chestOpen[i] = 1;
   state.stats.chestsOpened += 1;
+  // With vaults only every couple of floors, chests are the main supply line —
+  // weighted toward gear over raw gold.
   const roll = nextFloat(state);
-  if (roll < 0.4) {
+  if (roll < 0.32) {
     const g = gainGold(state, randInt(state, 15, 40), { chest: true });
     note(state, `📦 Chest: +${g} gold!`);
-  } else if (roll < 0.62) {
+  } else if (roll < 0.54) {
     giveItem(state, "medkit");
     note(state, "📦 Chest: a Med-Kit!");
-  } else if (roll < 0.76) {
+  } else if (roll < 0.73) {
     giveItem(state, "probe");
     note(state, "📦 Chest: a Probe!");
-  } else if (roll < 0.86) {
+  } else if (roll < 0.87) {
     const extras = ["bomb", "snare", "scroll", "tonic", "flare", "wardstone", "coffee"];
     const id = pick(state, extras);
     giveItem(state, id);
@@ -804,6 +822,8 @@ function startFloor(state, floor, typeKey) {
     state, "modAbilityCharges", CLASSES[state.classId].ability.charges
   );
   state.bestDepth = Math.max(state.bestDepth, floor);
+  state.runMap.push({ floor, type: typeKey });
+  if (state.runMap.length > 60) state.runMap.splice(0, state.runMap.length - 60);
   state.msg = "";
   state.phase = "play";
   note(
@@ -822,7 +842,8 @@ function genShop(state) {
     const m = ITEMS[id];
     return !(m.kind === "relic" && m.unique && (state.relics[id] || 0) > 0);
   });
-  return sampleN(state, purchasable, Math.min(3, purchasable.length));
+  // Vaults are rare stops now, so each one stocks a wider shelf.
+  return sampleN(state, purchasable, Math.min(4, purchasable.length));
 }
 
 function genPaths(state, nextFloor) {
@@ -833,22 +854,39 @@ function genPaths(state, nextFloor) {
 
 function openVault(state, nextFloor) {
   state.paths = genPaths(state, nextFloor);
-  state.shop = genShop(state);
-  state.altarUsed = false;
-  state.rerollCount = 0;
-  // Banked gold earns interest at each vault — spending everything has a cost.
-  const interest = Math.min(Math.floor(state.gold * 0.1), 30);
-  if (interest > 0) {
-    state.gold += interest;
-    state.stats.goldEarned += interest;
-    note(state, `🏦 Interest on ${state.gold - interest} banked gold: +${interest}.`);
+  state.vaultShop = vaultHasShop(nextFloor);
+  if (state.vaultShop) {
+    state.shop = genShop(state);
+    state.altarUsed = false;
+    state.restsThisVault = 0;
+    // Banked gold earns interest at each vault — spending everything has a cost.
+    const interest = Math.min(Math.floor(state.gold * 0.1), 30);
+    if (interest > 0) {
+      state.gold += interest;
+      state.stats.goldEarned += interest;
+      note(state, `🏦 Interest on ${state.gold - interest} banked gold: +${interest}.`);
+    }
+  } else {
+    // A bare landing between vaults: nothing for sale, but you catch your
+    // breath — a free heart, since the vault's bunk is floors away.
+    state.shop = [];
+    state.altarUsed = true;
+    note(state, "⛺ A bare landing — the vault lies deeper. Choose your descent.");
+    healPlayer(state, 2, "⛺ You catch your breath:", true);
   }
   state.phase = "shop";
 }
 
-/** Reroll price escalates within a single vault visit to stop infinite fishing. */
+/** Reroll price escalates for the whole run — rerolling is never reset. */
 export function rerollCost(state) {
-  return 5 * ((state.rerollCount || 0) + 1);
+  return REROLL_BASE + REROLL_STEP * (state.rerollCount || 0);
+}
+
+/** Replace only the unsold slots with fresh stock; sold slots stay sold. */
+function rerollUnsold(state) {
+  const fresh = genShop(state);
+  let k = 0;
+  state.shop = state.shop.map((id) => (id === null ? null : fresh[k++ % fresh.length]));
 }
 
 export function createRun(classId, seed = Date.now()) {
@@ -884,7 +922,11 @@ export function createRun(classId, seed = Date.now()) {
     shop: [],
     paths: [],
     altarUsed: false,
-    rerollCount: 0,
+    rerollCount: 0,        // run-wide: reroll price never resets
+    restCost: REST_COST_BASE, // run-wide: each rest raises the next one's price
+    restsThisVault: 0,
+    vaultShop: false,
+    runMap: [],            // [{floor, type}] — the journey so far
     endless: false,
     won: false,
     bestDepth: 0,
@@ -1071,21 +1113,35 @@ export function applyAction(prevState, action) {
     case "buy": error = doBuy(state, action.slot ?? -1); break;
     case "reroll": {
       const cost = rerollCost(state);
-      if (state.gold < cost) error = `Not enough gold to reroll (${cost}g).`;
+      if (!state.vaultShop) error = "No vault on this landing.";
+      else if (!state.shop.some((id) => id !== null))
+        error = "Every slot is sold — nothing left to reroll.";
+      else if (state.gold < cost) error = `Not enough gold to reroll (${cost}g).`;
       else {
         state.gold -= cost;
         state.rerollCount = (state.rerollCount || 0) + 1;
-        state.shop = genShop(state);
+        rerollUnsold(state);
+        note(state, `🎲 Rerolled the unsold stock (next reroll: ${rerollCost(state)}g).`);
       }
       break;
     }
     case "rest":
-      if (state.hp >= state.maxHp) error = "Already at full hearts.";
-      else if (state.gold < 12) error = "Not enough gold.";
-      else { state.gold -= 12; state.hp += 1; note(state, "➕ Rested. +1 heart."); }
+      if (!state.vaultShop) error = "No vault on this landing.";
+      else if (state.restsThisVault >= REST_LIMIT_PER_VAULT)
+        error = "The bunk is spent — no more resting at this vault.";
+      else if (state.hp >= state.maxHp) error = "Already at full hearts.";
+      else if (state.gold < state.restCost) error = "Not enough gold.";
+      else {
+        state.gold -= state.restCost;
+        state.hp += 1;
+        state.restsThisVault += 1;
+        state.restCost += REST_COST_STEP;
+        note(state, `➕ Rested. +1 heart (next rest: ${state.restCost}g).`);
+      }
       break;
     case "altar":
-      if (state.altarUsed) error = "The altar is spent.";
+      if (!state.vaultShop) error = "No vault on this landing.";
+      else if (state.altarUsed) error = "The altar is spent.";
       else if (state.hp < 2) error = "Too weak to bleed for the altar.";
       else {
         state.hp -= 1;
