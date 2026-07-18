@@ -501,10 +501,11 @@ function ItemHand({ state, onUseItem, onUseAbility, readOnly = false }) {
     {
       key: "ability", kind: "ability", icon: cls.ability.icon, name: cls.ability.name,
       count: readOnly ? cls.ability.charges : state.abilityCharges, desc: cls.ability.desc,
+      target: !!cls.ability.target,
     },
     ...itemIds.map((id) => ({
       key: `item-${id}`, kind: "item", id, icon: ITEMS[id].icon, name: ITEMS[id].name,
-      count: state.items[id], desc: ITEMS[id].desc,
+      count: state.items[id], desc: ITEMS[id].desc, target: !!ITEMS[id].target,
     })),
   ];
   const isMobile = useIsMobile();
@@ -536,30 +537,12 @@ function ItemHand({ state, onUseItem, onUseAbility, readOnly = false }) {
     swipe.current.x = null;
   };
 
-  // Compact one-row strip on small screens — the fanned hand is too tall to
-  // keep the whole game on one screen. Tap to use (aiming works as usual).
   if (isMobile) {
     return (
-      <div className="hand-strip">
-        {cards.map((c) => (
-          <button
-            key={c.key}
-            className={
-              `item-btn strip${c.kind === "ability" ? " ability" : ""}` +
-              `${c.count <= 0 ? " spent" : ""}`
-            }
-            disabled={readOnly || c.count <= 0}
-            title={`${c.name} — ${c.desc}`}
-            onClick={() => {
-              if (c.kind === "ability") onUseAbility();
-              else onUseItem(c.id);
-            }}
-          >
-            <span className="strip-ic">{c.icon}</span>
-            <span className="strip-ct">×{c.count}</span>
-          </button>
-        ))}
-      </div>
+      <MobileHand
+        cards={cards} readOnly={readOnly}
+        onUseItem={onUseItem} onUseAbility={onUseAbility}
+      />
     );
   }
 
@@ -618,6 +601,51 @@ function ItemHand({ state, onUseItem, onUseAbility, readOnly = false }) {
       {cards.length > 1 && (
         <button className="hand-arrow right" onClick={() => cycle(1)}>›</button>
       )}
+    </div>
+  );
+}
+
+// Ground-up mobile hand: a thumb-sized card rail with an always-visible detail
+// panel underneath, so every card's effect is readable on a phone — touch has
+// no hover tooltips. Tap a card to read it; Use/Aim sits inside the panel.
+function MobileHand({ cards, readOnly, onUseItem, onUseAbility }) {
+  const [sel, setSel] = useState(0);
+  useEffect(() => {
+    if (sel >= cards.length) setSel(Math.max(0, cards.length - 1));
+  }, [cards.length, sel]);
+  const c = cards[Math.min(sel, cards.length - 1)];
+  if (!c) return null;
+  return (
+    <div className="mhand">
+      <div className="mhand-rail">
+        {cards.map((k, i) => (
+          <button
+            key={k.key}
+            className={
+              `mcard${i === sel ? " active" : ""}` +
+              `${k.kind === "ability" ? " abilitycard" : ""}` +
+              `${k.count <= 0 ? " spent" : ""}`
+            }
+            onClick={() => setSel(i)}
+          >
+            <span className="mcard-ic">{k.icon}</span>
+            <span className="mcard-ct">×{k.count}</span>
+          </button>
+        ))}
+      </div>
+      <div className={`mhand-detail${c.kind === "ability" ? " abilitycard" : ""}`}>
+        <span className="mhand-txt">
+          <b>{c.icon} {c.name} ×{c.count}</b> — {c.desc}
+        </span>
+        {!readOnly && (
+          <button
+            className="buy mhand-use" disabled={c.count <= 0}
+            onClick={() => (c.kind === "ability" ? onUseAbility() : onUseItem(c.id))}
+          >
+            {c.target ? "Aim" : "Use"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

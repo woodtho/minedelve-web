@@ -24,7 +24,8 @@
 
 /* Chamfered "cut stone" corners — set --ch per element. */
 .stat, .item-btn, .btn, .buy, .big, .descend, .card, .path, .panel,
-.relic, .enemy-strip .foe, .aim, .savebox, .tag, .hand-card {
+.relic, .enemy-strip .foe, .aim, .savebox, .tag, .hand-card,
+.mcard, .mhand-detail {
   --ch: 6px;
   clip-path: polygon(
     var(--ch) 0, calc(100% - var(--ch)) 0, 100% var(--ch),
@@ -198,15 +199,42 @@ body {
 .hand-arrow.left { left: 4px; }
 .hand-arrow.right { right: 4px; }
 
-/* ---- compact hand: one tappable row on small screens ---- */
-.hand-strip {
+/* ---- mobile hand: card rail + always-readable detail panel ----
+   Touch has no hover tooltips, so the selected card's full effect text lives
+   in a persistent panel under the rail, with Use/Aim right beside it. */
+.mhand { margin: 2px auto 6px; max-width: 460px; }
+.mhand-rail {
   display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;
-  margin: 2px 0 6px;
+  margin-bottom: 5px;
 }
-.item-btn.strip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; }
-.strip-ic { font-size: 18px; line-height: 1; }
-.strip-ct { font-size: 11px; color: #ffd166; font-variant-numeric: tabular-nums; }
-.item-btn.strip.spent { opacity: .4; }
+.mcard {
+  --ch: 5px;
+  display: inline-flex; align-items: center; gap: 4px; padding: 8px 11px;
+  background: linear-gradient(180deg, #33281f, #271e17);
+  color: #f0e6d8; border: 1px solid #4a3a2e;
+  border-top-color: #5d4a38; border-bottom: 2px solid #1c1510;
+  font-family: inherit; cursor: pointer;
+}
+.mcard.active {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, #3c2e1d, #2b2015);
+}
+.mcard.abilitycard { border-color: #6a5a8a; }
+.mcard.abilitycard.active { border-color: #a48ad4; }
+.mcard.spent { opacity: .4; }
+.mcard-ic { font-size: 20px; line-height: 1; }
+.mcard-ct { font-size: 11px; color: #ffd166; font-variant-numeric: tabular-nums; }
+.mhand-detail {
+  --ch: 6px;
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 6px 11px; text-align: left;
+  background: linear-gradient(180deg, #2a211b, #201914);
+  border: 1px solid #4a3a2e; border-top-color: #5d4a38;
+}
+.mhand-detail.abilitycard { border-color: #6a5a8a; }
+.mhand-txt { flex: 1; font-size: 12px; color: #cbb89f; line-height: 1.4; }
+.mhand-txt b { color: var(--gold-hi); }
+.mhand-use { flex-shrink: 0; }
 
 .aim {
   --ch: 8px;
@@ -484,7 +512,7 @@ body {
     display: flex; flex-direction: column; justify-content: flex-end;
     margin: 6px auto 0;
   }
-  .grid { --chrome: 330px; }
+  .grid { --chrome: 385px; } /* leaves room for the hand's detail panel */
   .panel { padding: 16px 12px; margin: 14px auto; }
   .card { width: 46%; min-width: 140px; }
   .classcard { width: 46%; }
