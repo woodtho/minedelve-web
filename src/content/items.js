@@ -58,6 +58,38 @@ export const ITEMS = {
     desc: "Reveal 4 random safe tiles anywhere on the floor.",
     use: (state, H) => H.revealRandomSafe(state, 4, "🗺️ The map reveals"),
   },
+  flare: {
+    id: "flare", name: "Survey Flare", icon: "🎇", price: 22, kind: "item", target: false,
+    desc: "Reveal 7 random safe tiles. Best after the board is opened.",
+    use: (state, H) => H.revealRandomSafe(state, 7, "🎇 Survey Flare reveals"),
+  },
+  wardstone: {
+    id: "wardstone", name: "Wardstone", icon: "🔷", price: 18, kind: "item", target: false,
+    desc: "Gain 2 shield charges that block incoming hits.",
+    use: (state, H) => {
+      state.shieldCharges += 2;
+      H.note(state, "🔷 Wardstone hums — 2 shield charges raised.");
+      return true;
+    },
+  },
+  claim: {
+    id: "claim", name: "Prospector's Claim", icon: "📜", price: 14, kind: "item", target: false,
+    desc: "Cash in immediately for 24 gold.",
+    use: (state, H) => {
+      const g = H.gainGold(state, 24);
+      H.note(state, `📜 Claim redeemed for ${g} gold.`);
+      return true;
+    },
+  },
+  coffee: {
+    id: "coffee", name: "Black Coffee", icon: "☕", price: 16, kind: "item", target: false,
+    desc: "Restore 1 heart and reveal 2 random safe tiles.",
+    use: (state, H) => {
+      const healed = H.healPlayer(state, 1, "☕ Black Coffee:");
+      const revealed = H.revealRandomSafe(state, 2, "☕ Focus reveals");
+      return healed || revealed;
+    },
+  },
 
   // ---- relics ---------------------------------------------------------------
   iron_heart: {
@@ -129,6 +161,28 @@ export const ITEMS = {
         return true;
       },
     },
+  },
+  surveyor: {
+    id: "surveyor", name: "Surveyor's Lens", icon: "🧭", price: 30, kind: "relic", unique: false,
+    desc: "Each floor, reveal 1 random safe tile after the first dig. Stacks.",
+    hooks: {
+      afterPlacement: (state, H, count) => H.revealRandomSafe(state, count, "🧭 Surveyor's Lens reveals"),
+    },
+  },
+  satchel: {
+    id: "satchel", name: "Supply Satchel", icon: "🎒", price: 36, kind: "relic", unique: true,
+    desc: "Start each floor with 1 shield charge.",
+    hooks: {
+      floorStart: (state, H) => {
+        state.shieldCharges += 1;
+        H.note(state, "🎒 Supply Satchel: +1 shield charge.");
+      },
+    },
+  },
+  magnet: {
+    id: "magnet", name: "Gold Magnet", icon: "🧲", price: 38, kind: "relic", unique: true,
+    desc: "+25% gold from every source.",
+    hooks: { modGold: (state, count, amount) => amount * 1.25 },
   },
 };
 

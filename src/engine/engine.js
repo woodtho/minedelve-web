@@ -224,6 +224,11 @@ function damageEnemy(state, enemy, dmg, srcText) {
     }
   } else {
     note(state, `${srcText} hit the ${enemy.name} for ${dealt} (${enemy.hp}/${enemy.maxHp}).`);
+    if (enemy.winding && !enemy.boss) {
+      enemy.winding = false;
+      enemy.cd = runModHook(state, "modEnemyCooldown", enemy.cdMax);
+      note(state, `${enemy.icon} The ${enemy.name}'s attack is interrupted!`);
+    }
     if (enemy.boss && !enemy.enraged && enemy.hp <= Math.ceil(enemy.maxHp / 2)) {
       enemy.enraged = true;
       BOSSES[enemy.id]?.onEnrage?.(state, H, enemy);
@@ -327,7 +332,7 @@ function openChest(state, i) {
     giveItem(state, "probe");
     note(state, "📦 Chest: a Probe!");
   } else if (roll < 0.86) {
-    const extras = ["bomb", "snare", "scroll", "tonic"];
+    const extras = ["bomb", "snare", "scroll", "tonic", "flare", "wardstone", "coffee"];
     const id = pick(state, extras);
     giveItem(state, id);
     note(state, `📦 Chest: a ${ITEMS[id].name}!`);
@@ -495,9 +500,10 @@ function enemyAct(state, e) {
   }
   if (e.traits.steal) {
     if (state.gold > 0) {
-      const take = Math.min(state.gold, randInt(state, 4, 6 + state.floor));
+      const take = Math.min(state.gold, randInt(state, 3, 5 + Math.ceil(state.floor / 2)));
       state.gold -= take;
-      note(state, `${e.icon} The ${e.name} pilfers ${take} gold!`);
+      e.bounty += take;
+      note(state, `${e.icon} The ${e.name} pilfers ${take} gold. Kill it to win it back!`);
       return false;
     }
     return enemyStrike(state, e);
@@ -534,12 +540,13 @@ function enemyAct(state, e) {
     if (cands.length) {
       const i = pick(state, cands);
       b.revealed[i] = 0;
+      b.flagged[i] = 1;
       b.mine[i] = 1;
       b.mines += 1;
       recomputeAdj(b);
       const totalSafe = b.mine.length - b.mine.reduce((a, x) => a + x, 0);
       b.quota = Math.min(b.quota, totalSafe);
-      note(state, `${e.icon} The ${e.name} buries a fresh charge in cleared ground!`);
+      note(state, `${e.icon} The ${e.name} plants a marked powder charge!`);
       return false;
     }
     return enemyStrike(state, e);
@@ -794,6 +801,7 @@ function startFloor(state, floor, typeKey) {
     `Clear ${cfg.quota} tiles to open the stairs.`
   );
   if (tier > 0) note(state, `☠️ Corruption ${tier} — the mine grows hungrier.`);
+  runHook(state, "floorStart");
   CLASSES[state.classId].onFloorStart?.(state, H);
 }
 

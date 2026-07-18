@@ -12,6 +12,7 @@ import {
 } from "./saves.js";
 import { UNLOCKS, isUnlocked, checkUnlocks, dailySeed } from "./unlocks.js";
 import { playTransition, playError, isMuted, setMuted, unlockAudio } from "./sfx.js";
+import { BUILD_VERSION } from "../version.js";
 
 const NUM_COLORS = ["", "#5aa9ff", "#5cd65c", "#ff6b6b", "#c792ea",
   "#ffd166", "#4dd0e1", "#ff9e80", "#d8d8d8"];
@@ -165,6 +166,7 @@ function TitleScreen({ bestDepth, hasAutosave, onContinue, onNew, onDaily, onSav
     <div className="panel">
       <div className="title">MINEDELVE</div>
       <div className="subtitle">a minesweeper roguelite</div>
+      <div className="build">build {BUILD_VERSION}</div>
       <p>
         Descend through a cursed mine. Every floor is a minefield — but mines cost
         hearts, not your run. Pick a class, fight what wakes in the dark, choose
@@ -292,7 +294,7 @@ function Hud({ state, bestDepth }) {
     <>
       <div className="title">MINEDELVE</div>
       <div className="subtitle">
-        {cls.icon} {cls.name} · deepest run: floor {bestDepth}
+        {cls.icon} {cls.name} · deepest run: floor {bestDepth} · build {BUILD_VERSION}
       </div>
       <div className="hud">
         <div className="stat" style={{ borderColor: ft.accent }}>
@@ -415,7 +417,9 @@ function PlayScreen({ state, dispatch, pending, setPending, tickN, hurtN, uiErro
                 <button
                   className={`foe${e.boss ? " boss" : ""}${e.winding ? " windup" : ""}`}
                   key={e.uid}
-                  title={`Attack the ${e.name} for ${computeAttack(state)} damage`}
+                  title={e.winding && !e.boss
+                    ? `Attack to interrupt the ${e.name}'s strike`
+                    : `Attack the ${e.name} for ${computeAttack(state)} damage`}
                   onClick={() => dispatch({ type: "attack", r: e.r, c: e.c })}
                 >
                   ⚔️ {e.icon} {e.name} {e.hp}/{e.maxHp} · {status}
